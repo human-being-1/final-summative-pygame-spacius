@@ -5,29 +5,37 @@ import os
 pygame.init()
 
 class Enemy(pygame.sprite.Sprite):
-    bullet_timer = 0
+    bullet_timer = 30
 
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
 
         unscaled_image = pygame.image.load(os.path.join("sprites", "enemies", f"{random.randint(1, 15)}.png"))
-        self.image = pygame.transform.scale_by(unscaled_image, 2)
-        
+        self.image = pygame.transform.scale_by(unscaled_image, 2).convert_alpha()
+
+        self.mask = pygame.mask.from_surface(self.image)
+
         self.rect = player.image.get_rect()
         self.rect.y = random.randint(50, WINDOW_HEIGHT//3*2)
         self.rect.x = -90
         
-        self.distance_left = random.randint(100, WINDOW_WIDTH-100) + 90
+        self.distance_left = random.randint(0, WINDOW_WIDTH-64) + 90
 
 class Player(pygame.sprite.Sprite):
+    ammo = 0
+
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
 
         unscaled_image = pygame.image.load(os.path.join("sprites", "shuttle.png"))
-        self.image = pygame.transform.scale_by(unscaled_image, 2)
+        self.image = pygame.transform.scale_by(unscaled_image, 2).convert_alpha()
+
+        self.mask = pygame.mask.from_surface(self.image)
+
         
         self.rect = self.image.get_rect()
         self.rect.move_ip(WINDOW_WIDTH/2-(self.rect.w/2), WINDOW_HEIGHT/6*5)
+
 
 class Bullet(pygame.sprite.Sprite):
     def __init__(self, is_player, x, y):
@@ -40,6 +48,8 @@ class Bullet(pygame.sprite.Sprite):
             self.image.fill("white")
         else:
             self.image.fill("red")
+        
+        self.mask = pygame.mask.from_surface(self.image)
         
         self.rect = self.image.get_rect()
         self.rect.x = x
@@ -100,25 +110,28 @@ while True:
         text_rect = text.get_rect(center=(WINDOW_WIDTH/2, WINDOW_HEIGHT/2-32))
         screen.blit(text, text_rect)
 
-        text, rect = font.render("Press \"ENTER\" to return to title screen.", "white")
+        text, rect = font.render("Press X to return to title screen.", "white")
         text_rect = text.get_rect(center=(WINDOW_WIDTH/2, WINDOW_HEIGHT/2+32))
         screen.blit(text, text_rect)
 
-        if keys[pygame.K_RETURN]:
-            for sprite in enemies_on_screen.sprites():
-                sprite.kill()
+        if keys[pygame.K_x]:
+            enemies.empty()
+            player_bullets.empty()
+            enemy_bullets.empty()
             game_over = False
             title = True
+            continue
     elif title:
         text, rect = font_bold.render("Welcome to Spacius", "white")
         text_rect = text.get_rect(center=(WINDOW_WIDTH/2, WINDOW_HEIGHT/2-32))
         screen.blit(text, text_rect)
 
-        text, rect = font.render("Press \"ENTER\" to begin", "white")
+        text, rect = font.render("Press 'ENTER' to begin", "white")
         text_rect = text.get_rect(center=(WINDOW_WIDTH/2, WINDOW_HEIGHT/2+32))
         screen.blit(text, text_rect)
 
         if keys[pygame.K_RETURN]:
+            player.ammo = 5
             title = False
 
     else:
@@ -132,25 +145,42 @@ while True:
         else:
             newest_enemy.rect.move_ip(enemy_speed, 0)
             newest_enemy.distance_left -= enemy_speed
+        
+        collisions = pygame.sprite.groupcollide(enemies, player_bullets, True, True, collided = pygame.sprite.collide_mask)
+        for _ in collisions:
+            player.ammo += 1
 
         if keys[pygame.K_LEFT]:
             player.rect.move_ip(-player_speed, 0)
         if keys[pygame.K_RIGHT]:
             player.rect.move_ip(player_speed, 0)
-        if keys[pygame.K_UP]:
+        """if keys[pygame.K_UP]:
             player.rect.move_ip(0, -player_speed)
         if keys[pygame.K_DOWN]:
-            player.rect.move_ip(0, player_speed)
+            player.rect.move_ip(0, player_speed)"""
         if keys[pygame.K_z] and not bullet_just_shot:
             x = (player.rect.right + player.rect.left) // 2 - 3
             y = player.rect.y
             bullet = Bullet(True, x, y)
             player_bullets.add(bullet)
             bullet_just_shot = True
+            player.ammo -= 1
         elif not keys[pygame.K_z] and bullet_just_shot:
             bullet_just_shot = False
-
         player.rect.clamp_ip(window_rect)
+
+        if (len(player_bullets.sprites()) == 0 and player.ammo == 0) or pygame.sprite.spritecollideany(player, enemy_bullets, collided = pygame.sprite.collide_mask):
+            game_over = True
+            continue
+        
+        for enemy in enemies.sprites():
+            enemy.bullet_timer -= 1
+            if enemy.bullet_timer == 0:
+                enemy.bullet_timer = 120
+                x = (enemy.rect.right + enemy.rect.left) // 2
+                y = enemy.rect.bottom - 32
+                bullet = Bullet(False, x, y)
+                enemy_bullets.add(bullet)
 
         enemies.draw(screen)
 
@@ -161,7 +191,9 @@ while True:
 
         screen.blit(player.image, player.rect)
 
-        
+        text, rect = font_bold.render(f"{player.ammo} bullets", "white")
+        text_rect = text.get_rect(center=(WINDOW_WIDTH/2, 48))
+        screen.blit(text, text_rect)        
 
     pygame.display.flip()
     
