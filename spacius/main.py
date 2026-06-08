@@ -216,7 +216,7 @@ while True:
             bullet_just_shot = False
         player.rect.clamp_ip(window_rect)
 
-        if (len(player_bullets.sprites()) <= 0 and player.ammo == 0) or pygame.sprite.spritecollideany(player, enemy_bullets, collided = pygame.sprite.collide_mask):
+        if (len(player_bullets.sprites()) == 0 and player.ammo == 0) or player.ammo < 0 or pygame.sprite.spritecollideany(player, enemy_bullets, collided = pygame.sprite.collide_mask):
             game_over = True
             continue
         
