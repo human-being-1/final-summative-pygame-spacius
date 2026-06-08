@@ -31,7 +31,7 @@ class Enemy(pygame.sprite.Sprite):
             enemy_bullets.add(bullet)
 
 class Boss(pygame.sprite.Sprite):
-    bullet_timer = 60
+    bullet_timer = 100
 
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
@@ -48,10 +48,10 @@ class Boss(pygame.sprite.Sprite):
     def update(self):
         self.bullet_timer -= 1
         if self.bullet_timer == 0:
-            self.bullet_timer = 60
+            self.bullet_timer = 100
 
             self.rect.x = random.randint(0, WINDOW_WIDTH-64)
-            self.rect.y = random.randint(50, WINDOW_HEIGHT//2)
+            self.rect.y = random.randint(50, WINDOW_HEIGHT//4)
 
             x = self.rect.width // 2 + self.rect.x
             y = self.rect.bottom - 32
