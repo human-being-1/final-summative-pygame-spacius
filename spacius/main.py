@@ -5,7 +5,7 @@ import os
 pygame.init()
 
 class Enemy(pygame.sprite.Sprite):
-    bullet_timer = 30
+    bullet_timer = 100
 
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
@@ -15,14 +15,53 @@ class Enemy(pygame.sprite.Sprite):
 
         self.mask = pygame.mask.from_surface(self.image)
 
-        self.rect = player.image.get_rect()
-        self.rect.y = random.randint(50, WINDOW_HEIGHT//3*2)
+        self.rect = self.image.get_rect()
+        self.rect.y = random.randint(50, WINDOW_HEIGHT//2)
         self.rect.x = -90
         
         self.distance_left = random.randint(0, WINDOW_WIDTH-64) + 90
+    
+    def update(self):
+        self.bullet_timer -= 1
+        if self.bullet_timer == 0:
+            self.bullet_timer = 150
+            x = self.rect.width // 2 + self.rect.x
+            y = self.rect.bottom - 32
+            bullet = Bullet(False, x, y)
+            enemy_bullets.add(bullet)
+
+class Boss(pygame.sprite.Sprite):
+    bullet_timer = 60
+
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+
+        unscaled_image = pygame.image.load(os.path.join("sprites", "boss.png"))
+        self.image = pygame.transform.scale_by(unscaled_image, 3).convert_alpha()
+
+        self.mask = pygame.mask.from_surface(self.image)
+
+        self.rect = self.image.get_rect()
+        self.rect.y = WINDOW_HEIGHT//4
+        self.rect.x = WINDOW_WIDTH//2 - (self.rect.width//2)
+    
+    def update(self):
+        self.bullet_timer -= 1
+        if self.bullet_timer == 0:
+            self.bullet_timer = 60
+
+            self.rect.x = random.randint(0, WINDOW_WIDTH-64)
+            self.rect.y = random.randint(50, WINDOW_HEIGHT//2)
+
+            x = self.rect.width // 2 + self.rect.x
+            y = self.rect.bottom - 32
+            bullet = Bullet(False, x, y)
+            enemy_bullets.add(bullet)
 
 class Player(pygame.sprite.Sprite):
-    ammo = 0
+    ammo = 5
+    enemies_killed = 0
+    enemy_just_killed = False
 
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
@@ -32,9 +71,8 @@ class Player(pygame.sprite.Sprite):
 
         self.mask = pygame.mask.from_surface(self.image)
 
-        
         self.rect = self.image.get_rect()
-        self.rect.move_ip(WINDOW_WIDTH/2-(self.rect.w/2), WINDOW_HEIGHT/6*5)
+        self.rect.move_ip(WINDOW_WIDTH/2-(self.rect.w/2), WINDOW_HEIGHT//10*7)
 
 
 class Bullet(pygame.sprite.Sprite):
@@ -57,11 +95,11 @@ class Bullet(pygame.sprite.Sprite):
     
     def update(self):
         if self.is_player:
-            self.rect.move_ip(0, -14)
+            self.rect.move_ip(0, -10)
             if self.rect.y < -32:
                 self.kill()
         else:
-            self.rect.move_ip(0, 14)
+            self.rect.move_ip(0, 10)
             if self.rect.y > WINDOW_HEIGHT+32:
                 self.kill()
 
@@ -81,7 +119,10 @@ font = pygame.freetype.SysFont("Arial", 28)
 enemies = pygame.sprite.Group()
 enemy_spawn_timer = 0
 
-player = Player()
+boss = None
+boss_battle_happening = False
+
+player = None
 
 player_speed = 6
 enemy_speed = 8
@@ -93,8 +134,12 @@ bullet_just_shot = False
 newest_enemy = None
 newest_enemy_distance_left = 0
 
+msg = ""
+msg_timer = 0
+
 title = True
 game_over = False
+win = False
 
 while True:
     for event in pygame.event.get():
@@ -115,10 +160,28 @@ while True:
         screen.blit(text, text_rect)
 
         if keys[pygame.K_x]:
+            boss_battle_happening = False
             enemies.empty()
             player_bullets.empty()
             enemy_bullets.empty()
             game_over = False
+            title = True
+            continue
+    elif win:
+        text, rect = font_bold.render("You won!", "white")
+        text_rect = text.get_rect(center=(WINDOW_WIDTH/2, WINDOW_HEIGHT/2-32))
+        screen.blit(text, text_rect)
+
+        text, rect = font.render("Press X to return to title screen.", "white")
+        text_rect = text.get_rect(center=(WINDOW_WIDTH/2, WINDOW_HEIGHT/2+32))
+        screen.blit(text, text_rect)
+
+        if keys[pygame.K_x]:
+            boss_battle_happening = False
+            enemies.empty()
+            player_bullets.empty()
+            enemy_bullets.empty()
+            win = False
             title = True
             continue
     elif title:
@@ -131,25 +194,9 @@ while True:
         screen.blit(text, text_rect)
 
         if keys[pygame.K_RETURN]:
-            player.ammo = 5
+            player = Player()
             title = False
-
     else:
-        if not newest_enemy or newest_enemy.distance_left <= 0:
-            if enemy_spawn_timer > 0:
-                enemy_spawn_timer -= 1
-            else:
-                newest_enemy = Enemy()
-                enemies.add(newest_enemy)
-                enemy_spawn_timer = 60
-        else:
-            newest_enemy.rect.move_ip(enemy_speed, 0)
-            newest_enemy.distance_left -= enemy_speed
-        
-        collisions = pygame.sprite.groupcollide(enemies, player_bullets, True, True, collided = pygame.sprite.collide_mask)
-        for _ in collisions:
-            player.ammo += 1
-
         if keys[pygame.K_LEFT]:
             player.rect.move_ip(-player_speed, 0)
         if keys[pygame.K_RIGHT]:
@@ -173,16 +220,49 @@ while True:
             game_over = True
             continue
         
-        for enemy in enemies.sprites():
-            enemy.bullet_timer -= 1
-            if enemy.bullet_timer == 0:
-                enemy.bullet_timer = 120
-                x = (enemy.rect.right + enemy.rect.left) // 2
-                y = enemy.rect.bottom - 32
-                bullet = Bullet(False, x, y)
-                enemy_bullets.add(bullet)
+        if boss_battle_happening:
+            for hit in pygame.sprite.spritecollide(boss, player_bullets, True, pygame.sprite.collide_mask):
+                win = True
+                continue
+            
+            boss.update()
+            screen.blit(boss.image, boss.rect)
+        else:
+            if not newest_enemy or newest_enemy.distance_left <= 0:
+                if enemy_spawn_timer > 0:
+                    enemy_spawn_timer -= 1
+                else:
+                    newest_enemy = Enemy()
+                    enemies.add(newest_enemy)
+                    enemy_spawn_timer = 60
+            else:
+                newest_enemy.rect.move_ip(enemy_speed, 0)
+                newest_enemy.distance_left -= enemy_speed
+            
+            collisions = pygame.sprite.groupcollide(enemies, player_bullets, True, True, collided = pygame.sprite.collide_mask)
+            for _ in collisions:
+                player.ammo += 1
+                player.enemies_killed += 1
+                player.enemy_just_killed = True
+            
+            if player.enemy_just_killed:
+                if player.enemies_killed == 10:
+                    player.ammo = 8
+                    msg = "10 enemies killed, ammo increased to 10"
+                    msg_timer = 60
+                elif player.enemies_killed == 15:
+                    player.ammo = 3
+                    msg = "Boss battle starting!"
+                    msg_timer = 60
 
-        enemies.draw(screen)
+                    boss = Boss()
+                    boss_battle_happening = True
+                    enemies.empty()
+                    enemy_bullets.empty()
+                player.enemy_just_killed = False
+
+            enemies.update()
+            enemies.draw(screen)
 
         player_bullets.update()
         player_bullets.draw(screen)
@@ -190,6 +270,16 @@ while True:
         enemy_bullets.draw(screen)
 
         screen.blit(player.image, player.rect)
+
+        if msg_timer != 0:
+            msg_timer -= 1
+            text, rect = font.render(msg, "white")
+            text_rect = text.get_rect(center=(WINDOW_WIDTH/2, WINDOW_HEIGHT-72))
+            screen.blit(text, text_rect) 
+        
+        text, rect = font.render(f"Enemies killed: {player.enemies_killed}", "white")
+        text_rect = text.get_rect(center=(WINDOW_WIDTH/2, WINDOW_HEIGHT-48))
+        screen.blit(text, text_rect) 
 
         text, rect = font_bold.render(f"{player.ammo} bullets", "white")
         text_rect = text.get_rect(center=(WINDOW_WIDTH/2, 48))
